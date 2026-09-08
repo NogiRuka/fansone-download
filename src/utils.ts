@@ -1,4 +1,5 @@
 import { promises as fs } from 'node:fs';
+import dayjs from 'dayjs';
 import type { Post } from './fansone.d.js';
 
 export const dirExistsOrMkdir = async (dir: string): Promise<void> => {
@@ -9,6 +10,17 @@ export const dirExistsOrMkdir = async (dir: string): Promise<void> => {
 }
 
 export const userDirName = (post: Post) => `${post.displayname} (@${post.username})`;
+
+/** 生成不含扩展名的下载文件名。 */
+export const downloadFileName = (post: Post, fallbackTitle: string) => {
+    const title = post.title
+        .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 80) || fallbackTitle;
+    const createdAt = dayjs(post.created_at).format('YYYYMMDD_HHmmss');
+    return `${createdAt} ${title}`;
+};
 
 export const formatBytes = (bytes: number) => {
     if (bytes <= 0) {

@@ -1,13 +1,12 @@
 import type { Post } from "./fansone.d.js";
 import { FansoneApi } from "./fansone.js";
 import { DOWNLOADS_DIR, TEMP_DIR } from "./consts.js";
-import { dirExistsOrMkdir, getSpeedText, userDirName } from "./utils.js";
+import { dirExistsOrMkdir, downloadFileName, getSpeedText, userDirName } from "./utils.js";
 import path from 'node:path';
 import { createWriteStream, promises as fs } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import PQueue from 'p-queue';
 import got from 'got';
-import dayjs from 'dayjs';
 import cliProgress from 'cli-progress';
 import { Demuxer, Muxer } from 'node-av/api';
 import {
@@ -95,7 +94,7 @@ export class Video {
 
         const outputDir = path.resolve(DOWNLOADS_DIR, userDirName(this.post), 'videos');
         await dirExistsOrMkdir(outputDir);
-        const fileName = `${this.post.title.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 80) || 'video'}-${dayjs(this.post.created_at).format('YYYYMMDD_HHmmss')}-#FD${this.post.id}`;
+        const fileName = downloadFileName(this.post, 'video');
 
         const m3u8Url = await this.getM3u8Url();
         const tsRangeTempDir = path.resolve(TEMP_DIR, `ts-range-${this.post.id}`);

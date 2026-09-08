@@ -7,6 +7,7 @@ import { FansoneApi } from './fansone.js';
 import { Video } from './video.js';
 import type { Post } from './fansone.d.js';
 import { Photo } from './photo.js';
+import { downloadFileName, userDirName } from './utils.js';
 
 const POST_ID_REGEX = /#FD(\d+)/;
 
@@ -59,8 +60,14 @@ const createPostFilter = (config: Config | null) => {
     };
 };
 
-const collectDownloadedPostIds = async (baseDir: string): Promise<Set<number>> => {
+type DownloadedFiles = {
+    postIds: Set<number>;
+    fileBases: Set<string>;
+};
+
+const collectDownloadedFiles = async (baseDir: string): Promise<DownloadedFiles> => {
     const downloaded = new Set<number>();
+    const fileBases = new Set<string>();
     const stack = [baseDir];
     while (stack.length > 0) {
         const currentDir = stack.pop()!;
@@ -74,6 +81,12 @@ const collectDownloadedPostIds = async (baseDir: string): Promise<Set<number>> =
             if (!entry.isFile()) {
                 continue;
             }
+            const extension = path.extname(fullPath);
+            let fileBase = extension ? fullPath.slice(0, -extension.length) : fullPath;
+            if (path.basename(currentDir) === 'photos') {
+                fileBase = fileBase.replace(/-\d+$/, '');
+            }
+            fileBases.add(fileBase);
             const match = entry.name.match(POST_ID_REGEX);
             if (match) {
                 const postId = Number(match[1]);
@@ -83,8 +96,15 @@ const collectDownloadedPostIds = async (baseDir: string): Promise<Set<number>> =
             }
         }
     }
-    return downloaded;
+    return { postIds: downloaded, fileBases };
 };
+
+const expectedFileBase = (post: Post, type: 'photos' | 'videos') => path.resolve(
+    DOWNLOADS_DIR,
+    userDirName(post),
+    type,
+    downloadFileName(post, type === 'photos' ? 'photo' : 'video'),
+);
 
 export async function runCli(): Promise<void> {
     let config = await readConfig();
@@ -106,7 +126,7 @@ export async function runCli(): Promise<void> {
     });
 
     const { username } = fansone.getUserInfo();
-    const downloadedPostIds = await collectDownloadedPostIds(DOWNLOADS_DIR);
+    const { postIds: downloadedPostIds, fileBases: downloadedFileBases } = await collectDownloadedFiles(DOWNLOADS_DIR);
 
     while (true) {
         const menu = await select({
@@ -310,7 +330,10 @@ export async function runCli(): Promise<void> {
             const canViewPhotoPosts = photoPosts.filter(post => post.can_view != 0);
             const filteredPhotoPosts = canViewPhotoPosts.filter(postFilter);
 
-            const pendingPhotoPosts = filteredPhotoPosts.filter(post => !downloadedPostIds.has(post.id));
+            const pendingPhotoPosts = filteredPhotoPosts.filter(post => (
+                !downloadedPostIds.has(post.id)
+                && !downloadedFileBases.has(expectedFileBase(post, 'photos'))
+            ));
             console.log(`[${index + 1}/${selectedSubscriptions.length}] ${subscription.username} 开始下载图片帖子 剩余/过滤后/可看/总计 ${pendingPhotoPosts.length}/${filteredPhotoPosts.length}/${canViewPhotoPosts.length}/${photoPosts.length}）...`);
 
             for (const [photoIndex, photoPost] of pendingPhotoPosts.entries()) {
@@ -321,6 +344,7 @@ export async function runCli(): Promise<void> {
                     });
                     await photo.downloadToLocal();
                     downloadedPostIds.add(photoPost.id);
+                    downloadedFileBases.add(expectedFileBase(photoPost, 'photos'));
                 } catch (error) {
                     console.error(`[${index + 1}/${selectedSubscriptions.length}] ${subscription.username} (${photoIndex + 1}/${pendingPhotoPosts.length}) 下载图片帖子失败: ${photoPost.title}`, error);
                 }
@@ -357,7 +381,10 @@ export async function runCli(): Promise<void> {
             const canViewVideoPosts = videoPosts.filter(post => post.can_view != 0);
             const filteredVideoPosts = canViewVideoPosts.filter(postFilter);
 
-            const pendingPosts = filteredVideoPosts.filter(post => !downloadedPostIds.has(post.id));
+            const pendingPosts = filteredVideoPosts.filter(post => (
+                !downloadedPostIds.has(post.id)
+                && !downloadedFileBases.has(expectedFileBase(post, 'videos'))
+            ));
             console.log(`[${index + 1}/${selectedSubscriptions.length}] ${subscription.username} 开始下载视频帖子 剩余/过滤后/可看/总计 ${pendingPosts.length}/${filteredVideoPosts.length}/${canViewVideoPosts.length}/${videoPosts.length}）...`);
 
             for (const [videoIndex, videoPost] of pendingPosts.entries()) {
@@ -370,6 +397,7 @@ export async function runCli(): Promise<void> {
                     });
                     await video.downloadToLocal();
                     downloadedPostIds.add(videoPost.id);
+                    downloadedFileBases.add(expectedFileBase(videoPost, 'videos'));
                 } catch (error) {
                     console.error(`[${index + 1}/${selectedSubscriptions.length}] ${subscription.username} (${videoIndex + 1}/${pendingPosts.length}) 下载视频帖子失败: ${videoPost.title}`, error);
                 }

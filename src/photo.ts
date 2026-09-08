@@ -5,8 +5,7 @@ import got from "got";
 import cliProgress from "cli-progress";
 import { DOWNLOADS_DIR } from "./consts.js";
 import type { Post } from "./fansone.d.js";
-import { dirExistsOrMkdir, getSpeedText, userDirName } from "./utils.js";
-import dayjs from "dayjs";
+import { dirExistsOrMkdir, downloadFileName, getSpeedText, userDirName } from "./utils.js";
 import PQueue from "p-queue";
 import { readConfig } from "./config.js";
 import { logger } from "./logger.js";
@@ -28,7 +27,7 @@ export class Photo {
 
         const outputDir = path.resolve(DOWNLOADS_DIR, userDirName(this.post), 'photos');
         await dirExistsOrMkdir(outputDir);
-        const fileName = `${this.post.title.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 80) || 'photo'}-${dayjs(this.post.created_at).format('YYYYMMDD_HHmmss')}-#FD${this.post.id}`;
+        const fileName = downloadFileName(this.post, 'photo');
 
         const concurrency = (await readConfig()).download?.concurrency ?? 6;
         const queue = new PQueue({ concurrency });
